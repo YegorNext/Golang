@@ -183,25 +183,23 @@ func main() {
 
 	fmt.Println("Input CSV data line by line:")
 	n, _ := fmt.Fscanln(os.Stdin, &buffer) // вводимо рядок, зберігаємо в змінну
-	inpFile.WriteString(buffer + "\n")
+	if n != 0 {                            // якщо рядок НЕ пустий
+		inpFile.WriteString(buffer + "\n")
+	} else { // інакше завершуємо програму з повідомленням щодо відсутності введених даних
+		fmt.Println("You input no data")
+		os.Exit(1)
+	}
 
 	switch *treeSort { // в залежності від обраного типу сортування(прапор -а)
 
 	/***************** СОРТУВАННЯ ПЕРЕБОРОМ *********************/
 	/************************************************************/
 	case 1:
-		if n != 0 { // якщо рядок НЕ пустий
-			_startCell = createNodeHeader(&buffer)
-		} else { // інакше завершуємо програму з повідомленням щодо відсутності введених даних
-			fmt.Println("You input no data")
-			os.Exit(1)
-		}
-
-		for n, _ = fmt.Fscanln(os.Stdin, &buffer); n != 0; counter++ { // створюємо нові елементи списку(nodes)
+		for _startCell = createNodeHeader(&buffer); n != 0; counter++ { // створюємо нові елементи списку(nodes)
+			inpFile.WriteString(buffer + "\n")
 			addNode(&temp)
 			temp.data = strings.Split(buffer, ";") // заповнуємо ноди введеними значеннями в консоль
-			writeIn(inpFile, temp)
-			n, _ = fmt.Fscanln(os.Stdin, &buffer) // скануємо наступний уведений рядок
+			n, _ = fmt.Fscanln(os.Stdin, &buffer)  // скануємо наступний уведений рядок
 		}
 
 		if *headOp { // вмикаємо опцію заголовку -h
@@ -227,29 +225,24 @@ func main() {
 	/***************** СОРТУВАННЯ ДЕРЕВОМ *********************/
 	/************************************************************/
 	case 2:
-		if n != 0 { // якщо рядок НЕ пустий
-			var vertex *tree
-			if *headOp {
-				outFile.WriteString(buffer + "\n")
-				n, _ = fmt.Fscanln(os.Stdin, &buffer)
-				inpFile.WriteString(buffer + "\n")
-				vertex = createTreeVertex(&buffer)
-			} else {
-				vertex = createTreeVertex(&buffer)
-			}
-			for n, _ = fmt.Fscanln(os.Stdin, &buffer); n != 0; { // створюємо нові елементи списку(nodes)
-				inpFile.WriteString(buffer + "\n")
-				addBranch(vertex, &buffer, sortByLine)
-				n, _ = fmt.Fscanln(os.Stdin, &buffer) // скануємо наступний уведений рядок
-			}
-			if *revSort {
-				outTreeRev(vertex, outFile)
-			} else {
-				outTree(vertex, outFile)
-			}
-		} else { // інакше завершуємо програму з повідомленням щодо відсутності введених даних
-			fmt.Println("You input no data")
-			os.Exit(1)
+		var vertex *tree
+		if *headOp {
+			outFile.WriteString(buffer + "\n")
+			n, _ = fmt.Fscanln(os.Stdin, &buffer)
+			inpFile.WriteString(buffer + "\n")
+			vertex = createTreeVertex(&buffer)
+		} else {
+			vertex = createTreeVertex(&buffer)
+		}
+		for n, _ = fmt.Fscanln(os.Stdin, &buffer); n != 0; { // створюємо нові елементи списку(nodes)
+			inpFile.WriteString(buffer + "\n")
+			addBranch(vertex, &buffer, sortByLine)
+			n, _ = fmt.Fscanln(os.Stdin, &buffer) // скануємо наступний уведений рядок
+		}
+		if *revSort {
+			outTreeRev(vertex, outFile)
+		} else {
+			outTree(vertex, outFile)
 		}
 	}
 }

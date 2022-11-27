@@ -147,10 +147,8 @@ func listSort(head **node, size, value int) {
 }
 func main() {
 	var (
-		_startCell *node      // початковий вузол списку
-		temp       *node      // змінна для зберігання адреси тимчасового вузла
-		buffer     string     // буферна змінна для уведених рядків
-		counter    int    = 1 // лічильник кількості елементів однозв'язного списку
+		buffer  string     // буферна змінна для уведених рядків
+		counter int    = 1 // лічильник кількості елементів однозв'язного списку
 	)
 	var (
 		inputFileName  = flag.String("i", "input.csv", "Use a file with the name file-name as an input")
@@ -191,8 +189,8 @@ func main() {
 	/***************** СОРТУВАННЯ ПОШУКОМ МІНІМАЛЬНОГО ЕЛЕМЕНТУ *********************/
 	/************************************************************/
 	case 1:
-		_startCell = createNodeHeader(&buffer)
-		temp = _startCell
+		_startCell := createNodeHeader(&buffer)                        // початковий вузол списку
+		temp := _startCell                                             // змінна для зберігання адреси тимчасового вузла
 		for n, _ = fmt.Fscanln(os.Stdin, &buffer); n != 0; counter++ { // створюємо нові елементи списку(nodes)
 			addNode(&temp)
 			temp.data = strings.Split(buffer, ";") // заповнуємо ноди введеними значеннями в консоль

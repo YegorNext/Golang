@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 )
 
@@ -82,81 +81,76 @@ func writeFile(file *os.File, temp *tree) { // виводимо масив да�
 }
 
 /***************** Функції сортування перебером використовуючи однозв'язний список(nodes) *********************/
-func createNodeHeader(buffer *string) node { // створюємо початок списку
-	var _startCell node
-	_startCell.data = strings.Split(*buffer, ";") // розділяємо Першу уведену строку на масив підстрок
-	_startCell.next = nil
-	return _startCell
+func createNodeHeader(buffer *string) *node { // створюємо початок списку
+	var head node
+	head.data = strings.Split(*buffer, ";") // розділяємо Першу уведену строку на масив підстрок
+	return &head
 }
 func addNode(temp **node) { // додаємо вузол
 	(*temp).next = new(node)
 	(*temp) = (*temp).next
 	(*temp).next = nil
 }
-func headLineOptionSet(temp **node, _startCell *node, file *os.File, i *int) { // встановлюємо опцію заголовку(-h)
-	(*temp) = _startCell.next
-	writeIn(file, _startCell)
-	(*i)--
-}
-func nodeBegin(temp **node, _startCell *node) { // повертаємо список до початку
-	(*temp) = _startCell
-}
-func nextNode(temp **node, _startCell *node, headOp *bool) { // перемикання вузла в залежності від статусу обраної опції
-	if *headOp {
-		if (*temp).next == nil { // робимо наступні умови, доки не відшукаємо усі елементи
-			(*temp) = _startCell.next
+func listSortRev(head **node, size, value int) {
+	var (
+		adress  *node
+		maximum string = (*head).data[value]
+		temp           = (*head)
+		isSwap  bool
+	)
+	for i := 0; i < size; i++ {
+		isSwap = false
+		for temp.next != nil {
+			if temp.next.data[value] > maximum {
+				adress = temp
+				maximum = temp.next.data[value]
+				isSwap = true
+			}
+			temp = temp.next
+		}
+		if isSwap {
+			temp = adress.next
+			adress.next = temp.next
+			temp.next = *head
+			*head = temp
 		} else {
-			(*temp) = (*temp).next
+			break
 		}
-	} else {
-		if (*temp).next == nil { // робимо наступні умови, доки не відшукаємо усі елементи
-			(*temp) = _startCell
+	}
+}
+func listSort(head **node, size, value int) {
+	var (
+		adress  *node
+		minimum string = (*head).data[value]
+		temp           = (*head)
+		isSwap  bool
+	)
+	for i := 0; i < size; i++ {
+		isSwap = false
+		for temp.next != nil {
+			if temp.next.data[value] < minimum {
+				adress = temp
+				minimum = temp.next.data[value]
+				isSwap = true
+			}
+			temp = temp.next
+		}
+		if isSwap {
+			temp = adress.next
+			adress.next = temp.next
+			temp.next = *head
+			*head = temp
 		} else {
-			(*temp) = (*temp).next
+			break
 		}
-	}
-}
-
-func writeIn(file *os.File, temp *node) { // виводимо масив підстрок у файл
-	for i := 0; i < len(temp.data); i++ {
-		file.WriteString(temp.data[i] + ";")
-	}
-	file.WriteString("\n")
-}
-func sortUp(temp *node, counter int, outFile *os.File, headOp *bool, _startCell *node, sortByLine *int, str []string) { // сортування за зростанням перебором
-	if *headOp {
-		temp = _startCell.next
-	} else {
-		temp = _startCell
-	}
-	for i := 0; i < counter; {
-		if temp.data[*sortByLine] == str[i] {
-			writeIn(outFile, temp)
-			i++
-		}
-		nextNode(&temp, _startCell, headOp)
-	}
-}
-func sortRev(temp *node, counter int, outFile *os.File, headOp *bool, _startCell *node, sortByLine *int, str []string) { // сортування за спаданням перебором
-	if *headOp { // призначуємо для temp адрес вузла списку
-		temp = _startCell.next
-	} else {
-		temp = _startCell
-	}
-	for i := counter - 1; i >= 0; {
-		if temp.data[*sortByLine] == str[i] { // шукаємо i елемент відсортованого масиву у списку(методом перебору)
-			writeIn(outFile, temp)
-			i--
-		}
-		nextNode(&temp, _startCell, headOp)
 	}
 }
 func main() {
 	var (
-		_startCell node                 // початковий вузол списку
-		temp       *node  = &_startCell // змінна для зберігання адреси тимчасового вузла
-		buffer     string               // буферна змінна для уведених рядків
-		counter    int    = 1           // лічильник кількості елементів однозв'язного списку
+		_startCell *node      // початковий вузол списку
+		temp       *node      // змінна для зберігання адреси тимчасового вузла
+		buffer     string     // буферна змінна для уведених рядків
+		counter    int    = 1 // лічильник кількості елементів однозв'язного списку
 	)
 	var (
 		inputFileName  = flag.String("i", "input.csv", "Use a file with the name file-name as an input")
@@ -183,66 +177,56 @@ func main() {
 
 	fmt.Println("Input CSV data line by line:")
 	n, _ := fmt.Fscanln(os.Stdin, &buffer) // вводимо рядок, зберігаємо в змінну
-	if n != 0 {                            // якщо рядок НЕ пустий
-		inpFile.WriteString(buffer + "\n")
-	} else { // інакше завершуємо програму з повідомленням щодо відсутності введених даних
+	if n == 0 {                            // інакше завершуємо програму з повідомленням щодо відсутності введених даних
 		fmt.Println("You input no data")
 		os.Exit(1)
+	}
+	if *headOp {
+		outFile.WriteString(buffer + "\n")
+		n, _ = fmt.Fscanln(os.Stdin, &buffer)
 	}
 
 	switch *treeSort { // в залежності від обраного типу сортування(прапор -а)
 
-	/***************** СОРТУВАННЯ ПЕРЕБОРОМ *********************/
+	/***************** СОРТУВАННЯ ПОШУКОМ МІНІМАЛЬНОГО ЕЛЕМЕНТУ *********************/
 	/************************************************************/
 	case 1:
-		for _startCell = createNodeHeader(&buffer); n != 0; counter++ { // створюємо нові елементи списку(nodes)
-			inpFile.WriteString(buffer + "\n")
+		_startCell = createNodeHeader(&buffer)
+		temp = _startCell
+		for n, _ = fmt.Fscanln(os.Stdin, &buffer); n != 0; counter++ { // створюємо нові елементи списку(nodes)
 			addNode(&temp)
 			temp.data = strings.Split(buffer, ";") // заповнуємо ноди введеними значеннями в консоль
 			n, _ = fmt.Fscanln(os.Stdin, &buffer)  // скануємо наступний уведений рядок
 		}
 
-		if *headOp { // вмикаємо опцію заголовку -h
-			headLineOptionSet(&temp, &_startCell, outFile, &counter)
-		} else { // інакше повертаємо список до початку
-			nodeBegin(&temp, &_startCell)
+		if *revSort {
+			listSortRev(&_startCell, counter, *sortByLine)
+		} else {
+			listSort(&_startCell, counter, *sortByLine)
 		}
 
-		str := make([]string, counter) // створюємо масив за кількістю елементів однозв'язного списку
-		for i := 0; i < counter; i++ { // заповнюємо масив першими значеннями масиву підстрок з кожного елементу списку
-			str[i] = temp.data[*sortByLine]
-			temp = temp.next // гортаємо список
+		for temp = _startCell; temp != nil; temp = temp.next {
+			for i := 0; i < len(temp.data); i++ {
+				fmt.Print(temp.data[i] + ";")
+			}
 		}
-		sort.Strings(str) // сортуємо елементи
-
-		switch *revSort { // сортування за зростанням або спаданням в залежності від опції
-		case true:
-			sortRev(temp, counter, outFile, headOp, &_startCell, sortByLine, str)
-		case false:
-			sortUp(temp, counter, outFile, headOp, &_startCell, sortByLine, str)
-		}
-
 	/***************** СОРТУВАННЯ ДЕРЕВОМ *********************/
 	/************************************************************/
 	case 2:
-		var vertex *tree
-		if *headOp {
-			outFile.WriteString(buffer + "\n")
-			n, _ = fmt.Fscanln(os.Stdin, &buffer)
-			inpFile.WriteString(buffer + "\n")
-			vertex = createTreeVertex(&buffer)
-		} else {
-			vertex = createTreeVertex(&buffer)
-		}
-		for n, _ = fmt.Fscanln(os.Stdin, &buffer); n != 0; { // створюємо нові елементи списку(nodes)
-			inpFile.WriteString(buffer + "\n")
-			addBranch(vertex, &buffer, sortByLine)
-			n, _ = fmt.Fscanln(os.Stdin, &buffer) // скануємо наступний уведений рядок
-		}
-		if *revSort {
-			outTreeRev(vertex, outFile)
-		} else {
-			outTree(vertex, outFile)
+		if n != 0 { // якщо рядок НЕ пустий
+			var vertex *tree = createTreeVertex(&buffer)
+			for n, _ = fmt.Fscanln(os.Stdin, &buffer); n != 0; { // створюємо нові елементи списку(nodes)
+				addBranch(vertex, &buffer, sortByLine)
+				n, _ = fmt.Fscanln(os.Stdin, &buffer) // скануємо наступний уведений рядок
+			}
+			if *revSort {
+				outTreeRev(vertex, outFile)
+			} else {
+				outTree(vertex, outFile)
+			}
+		} else { // інакше завершуємо програму з повідомленням щодо відсутності введених даних
+			fmt.Println("You input no data")
+			os.Exit(1)
 		}
 	}
 }

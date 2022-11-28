@@ -100,29 +100,26 @@ func listSortRev(head **node, value int) *node {
 
 	var (
 		adress  *node
+		temp    *node
 		maximum string = (*head).data[value]
-		temp    *node  = (*head)
-		isSwap  bool   = true
+		isSwap  bool
 	)
-
-	for isSwap {
-		isSwap = false
-		for temp.next != nil {
-			if temp.next.data[value] > maximum {
-				adress = temp
-				maximum = temp.next.data[value]
-				isSwap = true
-			}
-			temp = temp.next
+	for temp = (*head); temp.next != nil; {
+		if temp.next.data[value] > maximum {
+			adress = temp
+			maximum = temp.next.data[value]
+			isSwap = true
 		}
-		if isSwap {
-			temp = adress.next
-			adress.next = temp.next
-			temp.next = *head
-			*head = temp
-		} else if (*head).next != nil {
-			(*head).next = listSortRev(&((*head).next), value)
-		}
+		temp = temp.next
+	}
+	if isSwap {
+		temp = adress.next
+		adress.next = temp.next
+		temp.next = *head
+		*head = temp
+		(*head).next = listSortRev(&((*head).next), value)
+	} else if !isSwap {
+		(*head).next = listSortRev(&((*head).next), value)
 	}
 	return *head
 }
@@ -134,29 +131,26 @@ func listSort(head **node, value int) *node {
 
 	var (
 		adress  *node
+		temp    *node
 		minimum string = (*head).data[value]
-		temp    *node  = (*head)
 		isSwap  bool
 	)
-
-	for isSwap = true; isSwap; {
-		isSwap = false
-		for temp.next != nil {
-			if temp.next.data[value] < minimum {
-				adress = temp
-				minimum = temp.next.data[value]
-				isSwap = true
-			}
-			temp = temp.next
+	for temp = (*head); temp.next != nil; {
+		if temp.next.data[value] < minimum {
+			adress = temp
+			minimum = temp.next.data[value]
+			isSwap = true
 		}
-		if isSwap {
-			temp = adress.next
-			adress.next = temp.next
-			temp.next = *head
-			*head = temp
-		} else if (*head).next != nil {
-			(*head).next = listSort(&((*head).next), value)
-		}
+		temp = temp.next
+	}
+	if isSwap {
+		temp = adress.next
+		adress.next = temp.next
+		temp.next = *head
+		*head = temp
+		(*head).next = listSort(&((*head).next), value)
+	} else if !isSwap {
+		(*head).next = listSort(&((*head).next), value)
 	}
 	return *head
 }

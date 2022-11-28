@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
@@ -55,7 +57,7 @@ func insertElem(vertex *tree, data []string) { // додаємо елемент 
 	vertex.left.data = data
 	vertex.left.left = temp
 }
-func outTree(vertex *tree, file *os.File) { // рекурсивно виводимо значення по зростанню
+func outTree(vertex *tree, file *bufio.Writer) { // рекурсивно виводимо значення по зростанню
 	if vertex.left != nil {
 		outTree(vertex.left, file)
 	}
@@ -64,7 +66,7 @@ func outTree(vertex *tree, file *os.File) { // рекурсивно виводи
 		outTree(vertex.right, file)
 	}
 }
-func outTreeRev(vertex *tree, file *os.File) { // рекурсивно виводимо значення за спаданням
+func outTreeRev(vertex *tree, file *bufio.Writer) { // рекурсивно виводимо значення за спаданням
 	if vertex.right != nil {
 		outTreeRev(vertex.right, file)
 	}
@@ -73,14 +75,14 @@ func outTreeRev(vertex *tree, file *os.File) { // рекурсивно виво�
 		outTreeRev(vertex.left, file)
 	}
 }
-func writeFile(file *os.File, temp *tree) { // виводимо масив даних кожної гілки
+func writeFile(file *bufio.Writer, temp *tree) { // виводимо масив даних кожної гілки
 	for i := 0; i < len(temp.data); i++ { // виводимо масив підстрок у файл
 		file.WriteString(temp.data[i] + ";")
 	}
 	file.WriteString("\n") // новий рядок у файлі
 }
 
-/***************** Функції сортування перебером використовуючи однозв'язний список(nodes) *********************/
+/***************** Функції сортування використовуючи однозв'язний список(nodes) *********************/
 func createNodeHeader(buffer *string) *node { // створюємо початок списку
 	var head node
 	head.data = strings.Split(*buffer, ";") // розділяємо Першу уведену строку на масив підстрок
@@ -89,16 +91,21 @@ func createNodeHeader(buffer *string) *node { // створюємо почато
 func addNode(temp **node) { // додаємо вузол
 	(*temp).next = new(node)
 	(*temp) = (*temp).next
-	(*temp).next = nil
 }
-func listSortRev(head **node, size, value int) {
+func listSortRev(head **node, value int) *node {
+
+	if *head == nil {
+		return nil
+	}
+
 	var (
 		adress  *node
 		maximum string = (*head).data[value]
-		temp           = (*head)
-		isSwap  bool
+		temp    *node  = (*head)
+		isSwap  bool   = true
 	)
-	for i := 0; i < size; i++ {
+
+	for isSwap {
 		isSwap = false
 		for temp.next != nil {
 			if temp.next.data[value] > maximum {
@@ -113,19 +120,26 @@ func listSortRev(head **node, size, value int) {
 			adress.next = temp.next
 			temp.next = *head
 			*head = temp
-		} else {
-			break
+		} else if (*head).next != nil {
+			(*head).next = listSortRev(&((*head).next), value)
 		}
 	}
+	return *head
 }
-func listSort(head **node, size, value int) {
+func listSort(head **node, value int) *node {
+
+	if *head == nil {
+		return nil
+	}
+
 	var (
 		adress  *node
 		minimum string = (*head).data[value]
-		temp           = (*head)
+		temp    *node  = (*head)
 		isSwap  bool
 	)
-	for i := 0; i < size; i++ {
+
+	for isSwap = true; isSwap; {
 		isSwap = false
 		for temp.next != nil {
 			if temp.next.data[value] < minimum {
@@ -140,10 +154,16 @@ func listSort(head **node, size, value int) {
 			adress.next = temp.next
 			temp.next = *head
 			*head = temp
-		} else {
-			break
+		} else if (*head).next != nil {
+			(*head).next = listSort(&((*head).next), value)
 		}
 	}
+	return *head
+}
+func headLine(file *bufio.Writer, reader *bufio.Reader) {
+	line, _ := reader.ReadString('\n')
+	file.WriteString(strings.TrimSuffix(line, "\n"))
+	file.WriteByte('\n')
 }
 func main() {
 	var (
@@ -151,7 +171,7 @@ func main() {
 		counter int    = 1 // лічильник кількості елементів однозв'язного списку
 	)
 	var (
-		inputFileName  = flag.String("i", "input.csv", "Use a file with the name file-name as an input")
+		inputFileName  = flag.String("i", "CLI", "Use a file with the name file-name as an input")
 		outputFileName = flag.String("o", "output.csv", "Use a file with the name file-name as an output")
 		headOp         = flag.Bool("h", true, "The first line is a header that must be ignored during sorting but included in the output")
 		sortByLine     = flag.Int("f", 0, "Sort input lines by value number N")
@@ -160,27 +180,75 @@ func main() {
 	)
 	flag.Parse()
 
-	inpFile, inpErr := os.Create(*inputFileName)  // створюємо файл для вводу
 	outFile, outErr := os.Create(*outputFileName) // // створюємо файл для виводу
-
-	if inpErr != nil { // якщо отримали помилку, завершуємо роботу програми
-		fmt.Println("Unable to create input file", inpErr)
-		os.Exit(1)
-	} else if outErr != nil { // якщо отримали помилку, завершуємо роботу програми
+	if outErr != nil {                            // якщо отримали помилку, завершуємо роботу програми
 		fmt.Println("Unable to create output file", outErr)
 		os.Exit(1)
 	}
-	defer inpFile.Close() // завершуємо роботу з файлом
-	defer outFile.Close() // завершуємо роботу з файлом
+	defer outFile.Close()              // завершуємо роботу з файлом
+	writer := bufio.NewWriter(outFile) // створюємо поток запису через буфер
+
+	/***************** СОРТУВАННЯ ВХІДНОГО ФАЙЛУ *********************/
+	/************************************************************/
+	if *inputFileName != "CLI" {
+		inpFile, err := os.Open(*inputFileName)
+		if err != nil {
+			fmt.Println("Unable to open file:", err)
+			os.Exit(1)
+		}
+		defer inpFile.Close() // завершуємо роботу з файлом
+		reader := bufio.NewReader(inpFile)
+
+		if *headOp {
+			headLine(writer, reader)
+		}
+
+		line, _ := reader.ReadString('\n')
+		line = strings.TrimSuffix(line, "\n")
+
+		switch *treeSort {
+		case 1: ///// СОРТУВАННЯ ПОШУКОМ НАЙМЕНШОГО ЕЛЕМЕНТУ СПИСКУ /////
+			_startCell := createNodeHeader(&line) // початковий вузол списку
+			for temp := _startCell; err != io.EOF; {
+				addNode(&temp)
+				line, err = reader.ReadString('\n')
+				temp.data = strings.Split(strings.TrimSuffix(line, "\n"), ";")
+			}
+			if *revSort {
+				listSortRev(&_startCell, *sortByLine)
+			} else {
+				listSort(&_startCell, *sortByLine)
+			}
+			for temp := _startCell; temp != nil; temp = temp.next {
+				for i := 0; i < len(temp.data); i++ {
+					writer.WriteString(temp.data[i] + ";")
+				}
+				writer.WriteByte('\n')
+			}
+		case 2: ///// СОРТУВАННЯ ДЕРЕВОМ ПОШУКУ /////
+			var vertex *tree = createTreeVertex(&line) // створюємо вершину
+			for err != io.EOF {                        // читаємо рядки до кінця файлу
+				line, err = reader.ReadString('\n')
+				line = strings.TrimSuffix(line, "\n")
+				addBranch(vertex, &line, sortByLine)
+			}
+			if *revSort {
+				outTreeRev(vertex, writer)
+			} else {
+				outTree(vertex, writer)
+			}
+		}
+		writer.Flush() // записуємо дані у файл
+		os.Exit(0)
+	}
+
+	/***************** СОРТУВАННЯ З CLI *********************/
+	/************************************************************/
 
 	fmt.Println("Input CSV data line by line:")
 	n, _ := fmt.Fscanln(os.Stdin, &buffer) // вводимо рядок, зберігаємо в змінну
-	if n == 0 {                            // інакше завершуємо програму з повідомленням щодо відсутності введених даних
-		fmt.Println("You input no data")
-		os.Exit(1)
-	}
-	if *headOp {
-		outFile.WriteString(buffer + "\n")
+	if *headOp && n != 0 {
+		writer.WriteString(buffer + "\n")
 		n, _ = fmt.Fscanln(os.Stdin, &buffer)
 	}
 
@@ -189,6 +257,10 @@ func main() {
 	/***************** СОРТУВАННЯ ПОШУКОМ МІНІМАЛЬНОГО ЕЛЕМЕНТУ *********************/
 	/************************************************************/
 	case 1:
+		if n == 0 { // інакше завершуємо програму з повідомленням щодо відсутності введених даних
+			fmt.Println("You input no data")
+			return
+		}
 		_startCell := createNodeHeader(&buffer)                        // початковий вузол списку
 		temp := _startCell                                             // змінна для зберігання адреси тимчасового вузла
 		for n, _ = fmt.Fscanln(os.Stdin, &buffer); n != 0; counter++ { // створюємо нові елементи списку(nodes)
@@ -198,33 +270,34 @@ func main() {
 		}
 
 		if *revSort {
-			listSortRev(&_startCell, counter, *sortByLine)
+			listSortRev(&_startCell, *sortByLine)
 		} else {
-			listSort(&_startCell, counter, *sortByLine)
+			listSort(&_startCell, *sortByLine)
 		}
 
 		for temp = _startCell; temp != nil; temp = temp.next {
 			for i := 0; i < len(temp.data); i++ {
-				fmt.Print(temp.data[i] + ";")
+				writer.WriteString(temp.data[i] + ";")
 			}
+			writer.WriteByte('\n')
 		}
 	/***************** СОРТУВАННЯ ДЕРЕВОМ *********************/
 	/************************************************************/
 	case 2:
-		if n != 0 { // якщо рядок НЕ пустий
-			var vertex *tree = createTreeVertex(&buffer)
-			for n, _ = fmt.Fscanln(os.Stdin, &buffer); n != 0; { // створюємо нові елементи списку(nodes)
-				addBranch(vertex, &buffer, sortByLine)
-				n, _ = fmt.Fscanln(os.Stdin, &buffer) // скануємо наступний уведений рядок
-			}
-			if *revSort {
-				outTreeRev(vertex, outFile)
-			} else {
-				outTree(vertex, outFile)
-			}
-		} else { // інакше завершуємо програму з повідомленням щодо відсутності введених даних
+		if n == 0 { // інакше завершуємо програму з повідомленням щодо відсутності введених даних
 			fmt.Println("You input no data")
-			os.Exit(1)
+			return
+		}
+		var vertex *tree = createTreeVertex(&buffer)
+		for n, _ = fmt.Fscanln(os.Stdin, &buffer); n != 0; { // створюємо нові елементи списку(nodes)
+			addBranch(vertex, &buffer, sortByLine)
+			n, _ = fmt.Fscanln(os.Stdin, &buffer) // скануємо наступний уведений рядок
+		}
+		if *revSort {
+			outTreeRev(vertex, writer)
+		} else {
+			outTree(vertex, writer)
 		}
 	}
+	writer.Flush()
 }

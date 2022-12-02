@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func DirFileRec(path string) {
+func DirFileRec(path string, filesChan chan string) {
 	files, err := os.ReadDir(path)
 	if err != nil {
 		log.Fatal(err)
@@ -17,11 +17,12 @@ func DirFileRec(path string) {
 
 	for _, file := range files {
 		if filepath.Ext(file.Name()) == ".csv" {
-			println(file.Name())
+			filesChan <- filepath.Join(path, file.Name())
 		} else if file.IsDir() {
-			DirFileRec(path + "/" + file.Name())
+			DirFileRec(filepath.Join(path, file.Name()), filesChan)
 		}
 	}
+	//close(filesChan) // закриваємо канал
 }
 
 /***************** Структура бінарного дерева пошуку*********************/
@@ -98,10 +99,48 @@ func writeFile(file *bufio.Writer, temp *tree) { // виводимо масив 
 /***********************************************************************/
 
 func main() {
+	const go_size int = 3
 	var (
 		path = flag.String("d", ".", "Use a file with the name file-name as an input")
 	)
 	flag.Parse()
 
-	DirFileRec(*path)
+	filesChan := make(chan string)
+	isProcessed := make(chan bool)
+	filesContent := make(chan string)
+
+	go func() {
+		DirFileRec(*path, filesChan)
+		close(filesChan)
+	}()
+	for i := 0; i < go_size; i++ {
+		go func() {
+			for path := range filesChan {
+				file, err := os.Open(path)
+				if err != nil {
+					log.Fatal(err)
+				}
+				reader := bufio.NewReader(file)
+				for {
+					line, _ := reader.ReadString('\n')
+					strings.TrimSuffix(line, "\n")
+					if line == "" {
+						break
+					}
+					filesContent <- line
+					//fmt.Print(line)
+				}
+				file.Close()
+			}
+			isProcessed <- true
+		}()
+	}
+	go func() {
+		for content := range filesContent {
+			print(content)
+		}
+	}()
+	for i := 0; i < go_size; i++ {
+		<-isProcessed
+	}
 }

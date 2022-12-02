@@ -106,7 +106,7 @@ func main() {
 	flag.Parse()
 
 	filesChan := make(chan string)
-	isProcessed := make(chan bool)
+	isProcessed := make(chan struct{})
 	filesContent := make(chan string)
 
 	go func() {
@@ -132,7 +132,7 @@ func main() {
 				}
 				file.Close()
 			}
-			isProcessed <- true
+			isProcessed <- struct{}{}
 		}()
 	}
 	go func() {

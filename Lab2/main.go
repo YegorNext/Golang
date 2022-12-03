@@ -3,14 +3,16 @@ package main
 import (
 	"bufio"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-func DirFileRec(path string, filesChan chan string) {
+var abort bool // глобальна змінна для припинення пошуку файлу за ім'ям в каталозі і його підкаталогах
+
+/***************** Рекурсивні функції для роботи з папками *********************/
+func DirFileRec(path string, filesChan chan string) { // рекурсивний прохід по всім файлам заданого дерева каталогу формату .csv
 	files, err := os.ReadDir(path)
 	if err != nil {
 		log.Fatal(err)
@@ -23,7 +25,31 @@ func DirFileRec(path string, filesChan chan string) {
 			DirFileRec(filepath.Join(path, file.Name()), filesChan)
 		}
 	}
-	//close(filesChan) // закриваємо канал
+}
+
+// /////////////////// Знахождення одного файлу за заданим ім'ям /////////////////////////////
+func FindFileDir(path string, filesChan chan string, inputfileName string, abort bool) {
+	if abort {
+		return
+	}
+
+	files, err := os.ReadDir(path)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, file := range files {
+		if file.Name() == inputfileName && !abort {
+			filesChan <- filepath.Join(path, file.Name())
+			abort = true
+		} else if file.IsDir() {
+			if abort {
+				break
+			}
+			FindFileDir(filepath.Join(path, file.Name()), filesChan, inputfileName, abort)
+		}
+	}
 }
 
 /***************** Структура бінарного дерева пошуку*********************/
@@ -39,7 +65,9 @@ func createTreeVertex(buffer string) *tree { // створеня вершини 
 	vertex.data = strings.Split(buffer, ";") // заповнення вершини початковим значенням
 	return vertex
 }
-func addBranch(vertex *tree, buffer string, sortByLine *int) { // додаємо нову гілку
+
+// /////////////////// Додаємо нову гілку /////////////////////////////
+func addBranch(vertex *tree, buffer string, sortByLine *int) {
 	var compare = strings.Split(buffer, ";")
 	if compare[*sortByLine] > vertex.data[*sortByLine] {
 		if vertex.right == nil {
@@ -64,11 +92,12 @@ func addBranch(vertex *tree, buffer string, sortByLine *int) { // додаємо
 		}
 	}
 }
-func insertElem(vertex *tree, data []string) { // додаємо елемент між гілками
+
+// //////////////// Вставка елементу між гілками /////////////////////////////
+func insertElem(vertex *tree, data []string) {
 	temp := vertex.left
 	vertex.left = new(tree)
-	vertex.left.data = data
-	vertex.left.left = temp
+	vertex.left = &tree{left: temp, data: data}
 }
 
 /***************** Функції виведення значень дерева*********************/
@@ -81,6 +110,28 @@ func outTree(vertex *tree, file *bufio.Writer) { // рекурсивно вив�
 		outTree(vertex.right, file)
 	}
 }
+
+// //////////////// Виведення значень у консоль /////////////////////////////
+func outCLI(vertex *tree) { // рекурсивно виводимо значення по зростанню
+	if vertex.left != nil {
+		outCLI(vertex.left)
+	}
+	println(strings.Join(vertex.data, ";"))
+	if vertex.right != nil {
+		outCLI(vertex.right)
+	}
+}
+func outCLIRev(vertex *tree) { // рекурсивно виводимо значення за спаданням
+	if vertex.right != nil {
+		outCLIRev(vertex.right)
+	}
+	println(strings.Join(vertex.data, ";"))
+	if vertex.left != nil {
+		outCLIRev(vertex.left)
+	}
+}
+
+// //////////////// Виведення значень у файл /////////////////////////////
 func outTreeRev(vertex *tree, file *bufio.Writer) { // рекурсивно виводимо значення за спаданням
 	if vertex.right != nil {
 		outTreeRev(vertex.right, file)
@@ -98,70 +149,96 @@ func writeFile(file *bufio.Writer, temp *tree) { // виводимо масив 
 /***********************************************************************/
 
 func main() {
-	const go_size int = 3
+	const go_size int = 3 // кількість горутин у другому етапі конвеєру
 
 	var (
-		path       = flag.String("d", ".", "Use a file with the name file-name as an input")
-		sortByLine = flag.Int("f", 0, "Sort input lines by value number N")
+		path           = flag.String("d", ".", "Use a file with the name file-name as an input")
+		inputFileName  = flag.String("i", "", "Use a file with the name file-name as an input")
+		sortByLine     = flag.Int("f", 0, "Sort input lines by value number N")
+		outputFileName = flag.String("o", "", "Use a file with the name file-name as an output")
+		revSort        = flag.Bool("r", false, "Sort input lines in reverse order")
 	)
 	flag.Parse()
 
-	filesChan := make(chan string)
-	isProcessed := make(chan struct{})
-	filesContent := make(chan string, 3)
-	buildTree := make(chan *tree)
+	filesChan := make(chan string)       // шляхи до файлів
+	isProcessed := make(chan struct{})   // сигнал стану обробки
+	filesContent := make(chan string, 3) // зміст знайдених файлів
+	buildTree := make(chan *tree)        // вершина побудованого бінарного дерева пошуку
 
+	/***************** Stage one: Directory Reading*********************/
 	go func() {
-		DirFileRec(*path, filesChan)
+		if *inputFileName != "" {
+			if *path != "." {
+				log.Fatal("You can't use -i and -d options at the same time")
+			}
+			FindFileDir(".", filesChan, *inputFileName, abort) // знаходимо один заданий  файл
+		} else {
+			DirFileRec(*path, filesChan) // знаходимо усі файли .csv
+		}
 		close(filesChan)
 	}()
+
+	/***************** Stage two: File Reading*********************/
 	for i := 0; i < go_size; i++ {
 		go func() {
 			var line string
 			var reader *bufio.Reader
 
-			for path := range filesChan {
-				file, err := os.Open(path)
+			for path := range filesChan { // зчитуємо зміст файлів з диску
+				file, err := os.Open(path) // відкриваємо файл
 				if err != nil {
 					log.Fatal(err)
 				}
 				reader = bufio.NewReader(file)
 				for {
-					line, _ = reader.ReadString('\n')
-					line = strings.Trim(line, "\n")
-					if line == "" {
-						break
+					line, _ = reader.ReadString('\n') // зчитуємо рядок за рядком
+					line = strings.Trim(line, "\n")   // прибраємо зайві байти
+					if line == "" {                   // якщо рядок пустий
+						break // виходимо з циклу
 					}
-					filesContent <- line
+					filesContent <- line // надсилаємо рядок у буфер
 				}
-				file.Close()
+				file.Close() // закриваємо файл
 			}
-			isProcessed <- struct{}{}
+			isProcessed <- struct{}{} // даємо сигнал, що горутину завершила роботу
 		}()
 	}
-	go func() {
+
+	/***************** Stage three: Sorting*********************/
+	go func() { // сортуємо бінарним деревом
 		var vertex *tree = createTreeVertex(<-filesContent)
 		for cont := range filesContent {
 			addBranch(vertex, cont, sortByLine)
-			fmt.Println(cont)
 		}
-		buildTree <- vertex
-		close(buildTree)
+		buildTree <- vertex // надсилаємо адрес вершини бінарного дерева
+		close(buildTree)    // закриваємо канал
 	}()
-	for i := 0; i < go_size; i++ {
+	for i := 0; i < go_size; i++ { // очікуємо завершення усіх горутин з етапу File Reading
 		<-isProcessed
 	}
-	close(filesContent)
+	close(filesContent) // закриваємо канал
 
-	outFile, outErr := os.Create("D:\\Student\\3 курс\\Golang\\output.csv")
+	if *outputFileName != "" { // якщо задано ім'я файлу для виводу
+		outFile, outErr := os.Create(*outputFileName) // створюємо файл за ім'ям
 
-	if outErr != nil {
-		log.Fatal(outErr)
+		if outErr != nil {
+			log.Fatal(outErr)
+		}
+		defer outFile.Close() // закриваємо файл після завершення роботи з ним
+		writer := bufio.NewWriter(outFile)
+
+		if !*revSort { // параметр -r(сортування за спаданням або зростанням)
+			outTree(<-buildTree, writer)
+		} else {
+			outTreeRev(<-buildTree, writer)
+		}
+		writer.Flush() // скидуємо дані у файл
+	} else { // якщо ім'я файлу для виводу не задано
+		if !*revSort { // виводу у консоль результат в залежності від значення флагу -r
+			outCLI(<-buildTree)
+		} else {
+			outCLIRev(<-buildTree)
+		}
 	}
-	defer outFile.Close()
-	writer := bufio.NewWriter(outFile)
-
-	outTree(<-buildTree, writer)
-	writer.Flush()
 
 }

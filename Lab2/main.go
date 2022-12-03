@@ -5,11 +5,14 @@ import (
 	"flag"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
-var abort bool // глобальна змінна для припинення пошуку файлу за ім'ям в каталозі і його підкаталогах
+var abort bool                   // глобальна змінна для припинення пошуку файлу за ім'ям в каталозі і його підкаталогах
+var exitchnl = make(chan int, 2) // код виходу
 
 /***************** Рекурсивні функції для роботи з папками *********************/
 func DirFileRec(path string, filesChan chan string) { // рекурсивний прохід по всім файлам заданого дерева каталогу формату .csv
@@ -146,6 +149,21 @@ func writeFile(file *bufio.Writer, temp *tree) { // виводимо масив 
 	file.WriteByte('\n')
 }
 
+/***************** Обробник сигналів виходу з програми*********************/
+func handler(signal os.Signal, isProcessed chan struct{}, fileContent, filesChan chan string) {
+	defer func() {
+		if r := recover(); r != nil {
+			println("Pipelines have been shut down")
+		}
+		exitchnl <- 1
+	}()
+	if signal == syscall.SIGINT {
+		close(filesChan)
+		close(fileContent)
+		close(isProcessed)
+	}
+}
+
 /***********************************************************************/
 
 func main() {
@@ -160,11 +178,20 @@ func main() {
 	)
 	flag.Parse()
 
+	sigchnl := make(chan os.Signal, 1)
+
 	filesChan := make(chan string)       // шляхи до файлів
 	isProcessed := make(chan struct{})   // сигнал стану обробки
 	filesContent := make(chan string, 3) // зміст знайдених файлів
 	buildTree := make(chan *tree)        // вершина побудованого бінарного дерева пошуку
 
+	signal.Notify(sigchnl, syscall.SIGINT)
+	go func() {
+		for {
+			s := <-sigchnl
+			handler(s, isProcessed, filesContent, filesChan)
+		}
+	}()
 	/***************** Stage one: Directory Reading*********************/
 	go func() {
 		if *inputFileName != "" {
@@ -203,7 +230,6 @@ func main() {
 			isProcessed <- struct{}{} // даємо сигнал, що горутину завершила роботу
 		}()
 	}
-
 	/***************** Stage three: Sorting*********************/
 	go func() { // сортуємо бінарним деревом
 		var vertex *tree = createTreeVertex(<-filesContent)
@@ -241,4 +267,16 @@ func main() {
 		}
 	}
 
+	go func() {
+		exitchnl <- 0
+		close(exitchnl)
+	}()
+	exitcode := <-exitchnl
+
+	switch exitcode {
+	case 0:
+		println("\nProgram completed successfully")
+	case 1:
+		println("\nProgram stopped by a signal")
+	}
 }

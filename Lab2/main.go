@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -33,13 +34,13 @@ type tree struct { // структура дерева
 }
 
 /***************** Функції бінарного дерева пошуку*********************/
-func createTreeVertex(buffer *string) *tree { // створеня вершини гілки
+func createTreeVertex(buffer string) *tree { // створеня вершини гілки
 	var vertex = new(tree)
-	vertex.data = strings.Split(*buffer, ";") // заповнення вершини початковим значенням
+	vertex.data = strings.Split(buffer, ";") // заповнення вершини початковим значенням
 	return vertex
 }
-func addBranch(vertex *tree, buffer *string, sortByLine *int) { // додаємо нову гілку
-	var compare = strings.Split(*buffer, ";")
+func addBranch(vertex *tree, buffer string, sortByLine *int) { // додаємо нову гілку
+	var compare = strings.Split(buffer, ";")
 	if compare[*sortByLine] > vertex.data[*sortByLine] {
 		if vertex.right == nil {
 			vertex.right = new(tree)
@@ -90,24 +91,25 @@ func outTreeRev(vertex *tree, file *bufio.Writer) { // рекурсивно ви
 	}
 }
 func writeFile(file *bufio.Writer, temp *tree) { // виводимо масив даних кожної гілки
-	for i := 0; i < len(temp.data); i++ { // виводимо масив підстрок у файл
-		file.WriteString(temp.data[i] + ";")
-	}
-	file.WriteString("\n") // новий рядок у файлі
+	file.WriteString(strings.Join(temp.data, ";"))
+	file.WriteByte('\n')
 }
 
 /***********************************************************************/
 
 func main() {
 	const go_size int = 3
+
 	var (
-		path = flag.String("d", ".", "Use a file with the name file-name as an input")
+		path       = flag.String("d", ".", "Use a file with the name file-name as an input")
+		sortByLine = flag.Int("f", 0, "Sort input lines by value number N")
 	)
 	flag.Parse()
 
 	filesChan := make(chan string)
 	isProcessed := make(chan struct{})
-	filesContent := make(chan string)
+	filesContent := make(chan string, 3)
+	buildTree := make(chan *tree)
 
 	go func() {
 		DirFileRec(*path, filesChan)
@@ -115,20 +117,22 @@ func main() {
 	}()
 	for i := 0; i < go_size; i++ {
 		go func() {
+			var line string
+			var reader *bufio.Reader
+
 			for path := range filesChan {
 				file, err := os.Open(path)
 				if err != nil {
 					log.Fatal(err)
 				}
-				reader := bufio.NewReader(file)
+				reader = bufio.NewReader(file)
 				for {
-					line, _ := reader.ReadString('\n')
-					strings.TrimSuffix(line, "\n")
+					line, _ = reader.ReadString('\n')
+					line = strings.Trim(line, "\n")
 					if line == "" {
 						break
 					}
 					filesContent <- line
-					//fmt.Print(line)
 				}
 				file.Close()
 			}
@@ -136,11 +140,28 @@ func main() {
 		}()
 	}
 	go func() {
-		for content := range filesContent {
-			print(content)
+		var vertex *tree = createTreeVertex(<-filesContent)
+		for cont := range filesContent {
+			addBranch(vertex, cont, sortByLine)
+			fmt.Println(cont)
 		}
+		buildTree <- vertex
+		close(buildTree)
 	}()
 	for i := 0; i < go_size; i++ {
 		<-isProcessed
 	}
+	close(filesContent)
+
+	outFile, outErr := os.Create("D:\\Student\\3 курс\\Golang\\output.csv")
+
+	if outErr != nil {
+		log.Fatal(outErr)
+	}
+	defer outFile.Close()
+	writer := bufio.NewWriter(outFile)
+
+	outTree(<-buildTree, writer)
+	writer.Flush()
+
 }
